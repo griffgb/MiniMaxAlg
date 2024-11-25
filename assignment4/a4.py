@@ -6,13 +6,101 @@ import sys
 import random
 import signal
 
-# Custom time out exception
-class TimeoutException(Exception):
-    pass
+import math 
+import time 
+import numpy as np
+
 
 # Function that is called when we reach the time limit
 def handle_alarm(signum, frame):
-    raise TimeoutException
+    raise TimeoutError
+
+
+# def uct(child_wins: int, child_visits: int, parent_visits: int, exploration: float) -> float:
+#     return child_wins / child_visits + exploration * np.sqrt(np.log(parent_visits) / child_visits)
+
+
+
+# class BinaryTreeNode:
+#     def __init__(self, board, player, parent=None, move=None):
+#         self.board = [row[:] for row in board]  # Deep copy of the board
+#         self.player = player  # Current player
+#         self.parent = parent
+#         self.move = move  # Move that led to this node
+#         self.children = []
+#         self.visits = 0
+#         self.wins = 0
+#         self.untried_moves = self.get_legal_moves()
+
+#     def get_legal_moves(self):
+#         # Use CommandInterface's legal move generator
+#         legal_moves = []
+#         print(legal_moves)
+#         for y in range(len(self.board)):
+#             for x in range(len(self.board[0])):
+#                 for num in (0, 1):
+#                     if self.valid_move(x, y, num):  # Use starter code's valid_move method
+#                         legal_moves.append((x, y, num))
+#         return legal_moves
+
+#     def valid_move(self, x, y, num):
+#         # Use the starter code's valid_move method for consistency
+#         legal, _ = CommandInterface.is_legal(self, x, y, num)
+#         return legal
+
+# class MCTSBinaryGame:
+#     def __init__(self, root_board, root_player):
+#         self.root = BinaryTreeNode(root_board, root_player)
+
+#     def select(self, node):
+#         while node.untried_moves == [] and node.children != []:
+#             node = max(
+#                 node.children,
+#                 key=lambda child: uct(child.wins, child.visits, node.visits, 1.0)
+#             )
+#         return node
+
+#     def expand(self, node):
+#         if node.untried_moves:
+#             move = node.untried_moves.pop()
+#             new_board = [row[:] for row in node.board]  # Copy board
+#             x, y, num = move
+#             new_board[y][x] = num
+#             new_node = BinaryTreeNode(new_board, 3 - node.player, node, move)
+#             node.children.append(new_node)
+#             return new_node
+#         return node
+
+#     def simulate(self, node):
+#         board = [row[:] for row in node.board]
+#         player = node.player
+#         while True:
+#             legal_moves = node.get_legal_moves()
+#             if not legal_moves:
+#                 return 1 if player == 2 else 0  # Opponent loses
+#             move = random.choice(legal_moves)
+#             x, y, num = move
+#             board[y][x] = num
+#             player = 3 - player  # Switch player
+
+#     def backpropagate(self, node, result):
+#         while node:
+#             node.visits += 1
+#             node.wins += result
+#             node = node.parent
+
+#     def best_move(self, time_limit):
+#         import time
+#         start_time = time.time()
+#         while time.time() - start_time < time_limit:
+#             leaf = self.select(self.root)
+#             expanded = self.expand(leaf)
+#             result = self.simulate(expanded)
+#             self.backpropagate(expanded, result)
+#         return max(self.root.children, key=lambda c: c.visits).move
+
+
+
 
 class CommandInterface:
 
@@ -232,26 +320,133 @@ class CommandInterface:
     # VVVVVVVVVV Start of Assignment 4 functions. Add/modify as needed. VVVVVVVV
     #===============================================================================================
 
-    def genmove(self, args):
-        try:
-            # Set the time limit alarm
-            signal.alarm(self.max_genmove_time)
+    def add_to_tt(self, hash, move, winner):
+        if len(self.tt) < 1000000:
+            self.tt[hash] = (move, winner)
             
-            # Modify the following to give better moves than random play 
-            moves = self.get_legal_moves()
-            if len(moves) == 0:
-                print("resign")
+    def undo(self, move):
+        self.board[int(move[1])][int(move[0])] = None
+        if self.player == 1:
+            self.player = 2
+        else:
+            self.player = 1
+
+    def quick_play(self, move):
+        self.board[int(move[1])][int(move[0])] = int(move[2])
+        if self.player == 1:
+            self.player = 2
+        else:
+            self.player = 1
+
+    def minimax(self, alpha = ('-inf'), beta = ('inf')):
+        hash = str(self.board)
+        if hash in self.tt:
+            return self.tt[hash]    # reuse result from transposition table 
+        
+        moves = self.get_legal_moves()
+        if len(moves) == 0: # no legal moves for player, opponent wins
+            if self.player == 1:  
+                self.add_to_tt(hash, None, 2)
+                return None, 2
+            
             else:
-                rand_move = moves[random.randint(0, len(moves)-1)]
-                self.play(rand_move)
-                print(" ".join(rand_move))
+                self.add_to_tt(hash, None, 1)
+                return None, 1    
+        
+        if self.player == 1: # maximizing player
+            for move in moves:
+                self.quick_play(move)
+                opponent_move, opponent_winner = self.minimax(alpha, beta) 
+                self.undo(move)
+                
+                if opponent_winner == self.player:
+                    # win for the maximizing player
+                    self.add_to_tt(hash, move, self.player)
+                    return move, self.player
+                
+                if opponent_winner != self.player:
+                    # opponent wins
+                    score = -1
+                    
+                else:
+                    # current player wins
+                    score = 0
+                    
+                alpha = max(alpha, score)
+                
+                if beta <= alpha:   # prune
+                    break 
             
-            # Disable the time limit alarm 
+            # no winning move is found 
+            self.add_to_tt(hash, None, 2)
+            return None, 2 
+        
+        
+        else:  # minimizing player
+            for move in moves:
+                self.quick_play(move)  
+                opponent_move, opponent_winner = self.minimax(alpha, beta)  
+                self.undo(move)  
+
+                if opponent_winner == self.player:
+                    # win for the minimizing player
+                    self.add_to_tt(hash, move, self.player)
+                    return move, self.player
+
+                if opponent_winner != self.player:
+                    # opponent wins
+                    score = 1
+                else:
+                    # current player wins
+                    score = 0
+                
+                beta = min(beta, score)
+
+                if beta <= alpha: # prune
+                    break
+
+            # no winning move is found
+            self.add_to_tt(hash, None, 1)
+            return None, 1
+
+            
+    
+    def genmove(self, args):
+        
+        moves = self.get_legal_moves()  # all legal moves
+        if len(moves) == 0:
+            print("resign")  # resign if no moves are available
+            return True
+
+        # save a copy of the current board and player
+        player_copy = self.player
+        board_copy = [list(row) for row in self.board]  # copy of the board
+
+        try:
+            # Set a time limit for the move calculation
+            signal.alarm(self.max_genmove_time)
+
+            # minimax with alpha-beta pruning to determine the best move
+            self.tt = {}  # Reset transposition table
+            move, value = self.minimax(alpha=float('-inf'), beta=float('inf'))
+
+            # if the program cant find a winning move just pick a random spot
+            if move is None:
+                move = moves[random.randint(0, len(moves) - 1)]
+
+            # Disable the time limit alarm
             signal.alarm(0)
 
-        except TimeoutException:
-            # This block of code runs when the time limit is reached
-            print("resign")
+        except TimeoutError:
+            move = moves[random.randint(0, len(moves) - 1)]
+
+        # restore the board and player state
+        self.board = board_copy
+        self.player = player_copy
+
+        # apply move
+        self.play(move)
+        print(" ".join(move))
 
         return True
     
