@@ -120,6 +120,10 @@ class CommandInterface:
         self.player = 1
         self.max_genmove_time = 1
         signal.signal(signal.SIGALRM, handle_alarm)
+        self.tt = {}
+        self.n = len(self.board[0])  # Number of columns
+        self.m = len(self.board)     # Number of rows
+
     
     #====================================================================================================================
     # VVVVVVVVVV Start of predefined functions. You may modify, but make sure not to break the functionality. VVVVVVVVVV
@@ -209,38 +213,51 @@ class CommandInterface:
     def is_legal(self, x, y, num):
         if self.board[y][x] is not None:
             return False, "occupied"
-        
-        consecutive = 0
-        count = 0
-        self.board[y][x] = num
-        for row in range(len(self.board)):
-            if self.board[row][x] == num:
-                count += 1
-                consecutive += 1
-                if consecutive >= 3:
-                    self.board[y][x] = None
-                    return False, "three in a row"
-            else:
-                consecutive = 0
-        too_many = count > len(self.board) // 2 + len(self.board) % 2
-        
-        consecutive = 0
-        count = 0
-        for col in range(len(self.board[0])):
-            if self.board[y][col] == num:
-                count += 1
-                consecutive += 1
-                if consecutive >= 3:
-                    self.board[y][x] = None
-                    return False, "three in a row"
-            else:
-                consecutive = 0
-        if too_many or count > len(self.board[0]) // 2 + len(self.board[0]) % 2:
-            self.board[y][x] = None
-            return False, "too many " + str(num)
 
-        self.board[y][x] = None
+        # Check row for violations
+        row_count = 0
+        consecutive = 0
+        for col in range(len(self.board[0])):
+            if col == x:  # Simulate placing the number
+                cell_value = num
+            else:
+                cell_value = self.board[y][col]
+            
+            if cell_value == num:
+                row_count += 1
+                consecutive += 1
+                if consecutive >= 3:
+                    return False, "three in a row"
+            else:
+                consecutive = 0
+
+        # Check if too many of `num` in the row
+        if row_count > len(self.board[0]) // 2 + len(self.board[0]) % 2:
+            return False, f"too many {num}"
+
+        # Check column for violations
+        col_count = 0
+        consecutive = 0
+        for row in range(len(self.board)):
+            if row == y:  # Simulate placing the number
+                cell_value = num
+            else:
+                cell_value = self.board[row][x]
+            
+            if cell_value == num:
+                col_count += 1
+                consecutive += 1
+                if consecutive >= 3:
+                    return False, "three in a row"
+            else:
+                consecutive = 0
+
+        # Check if too many of `num` in the column
+        if col_count > len(self.board) // 2 + len(self.board) % 2:
+            return False, f"too many {num}"
+
         return True, ""
+
     
     def valid_move(self, x, y, num):
         if  x >= 0 and x < len(self.board[0]) and\
@@ -338,13 +355,66 @@ class CommandInterface:
         else:
             self.player = 1
 
+    def game_stage(self):
+        total_cells = self.n * self.m
+        filled_cells = sum(1 for row in self.board for cell in row if cell is not None)
+        if filled_cells < total_cells * 0.2:  # Early game: less than 20% of the board is filled
+            return "early"
+        elif filled_cells < total_cells * 0.8:  # Mid game: 20%-80% filled
+            return "mid"
+        else:  # Late game
+            return "late"
+
+    def heuristic_value(self, move):
+        x, y, value = int(move[0]), int(move[1]), int(move[2])  
+        center_x, center_y = self.n // 2, self.m // 2
+
+        # Heuristic components
+        distance_to_center = abs(x - center_x) + abs(y - center_y)
+        neighbors = sum(
+            1 for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            if 0 <= x + dx < self.n and 0 <= y + dy < self.m and self.board[y + dy][x + dx] is not None
+        )
+        row_balance = abs(self.board[y].count(0) - self.board[y].count(1))
+        col_balance = abs(
+            [self.board[i][x] for i in range(self.m)].count(0) - 
+            [self.board[i][x] for i in range(self.m)].count(1)
+        )
+
+        # Dynamic weights
+        stage = self.game_stage()
+        if stage == "early":
+            w_center = 3  # Strongly prioritize centrality
+            w_neighbors = 1  # Weaken neighbor importance
+            w_balance = 1  # Balance still matters
+        elif stage == "mid":
+            w_center = 2
+            w_neighbors = 2
+            w_balance = 2
+        else:  # Late game
+            w_center = 1  # Centrality is less important
+            w_neighbors = 3  # Blocking and forming clusters are crucial
+            w_balance = 3
+
+        # Combine heuristics
+        score = (
+            -w_center * distance_to_center +
+            w_neighbors * neighbors -
+            w_balance * (row_balance + col_balance)
+        )
+        return score
+
+    def get_ordered_moves(self, moves):
+        # Sort moves by heuristic value in descending order (higher score = higher priority)
+        return sorted(moves, key=self.heuristic_value, reverse=True)    
+
     def minimax(self, alpha = ('-inf'), beta = ('inf')):
         hash = str(self.board)
         if hash in self.tt:
             return self.tt[hash]    # reuse result from transposition table 
         
         moves = self.get_legal_moves()
-        if len(moves) == 0: # no legal moves for player, opponent wins
+        if not moves: # no legal moves for player, opponent wins
             if self.player == 1:  
                 self.add_to_tt(hash, None, 2)
                 return None, 2
@@ -353,64 +423,77 @@ class CommandInterface:
                 self.add_to_tt(hash, None, 1)
                 return None, 1    
         
-        if self.player == 1: # maximizing player
-            for move in moves:
+        best_move = None
+
+        if self.player == 1:  # Maximizing player
+            best_score = float('-inf')
+            ordered_moves = self.get_ordered_moves(moves)  # Order moves using heuristic
+
+            for move in ordered_moves:  # Evaluate moves in heuristic order
                 self.quick_play(move)
-                opponent_move, opponent_winner = self.minimax(alpha, beta) 
+                opponent_move, opponent_winner = self.minimax(alpha, beta)
                 self.undo(move)
-                
+
                 if opponent_winner == self.player:
-                    # win for the maximizing player
+                    # Win for the maximizing player
                     self.add_to_tt(hash, move, self.player)
                     return move, self.player
-                
-                if opponent_winner != self.player:
-                    # opponent wins
+
+                elif opponent_winner != self.player:
+                    # Opponent wins
                     score = -1
-                    
                 else:
-                    # current player wins
+                    # Current player wins
                     score = 0
-                    
+
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+
                 alpha = max(alpha, score)
-                
-                if beta <= alpha:   # prune
-                    break 
-            
-            # no winning move is found 
-            self.add_to_tt(hash, None, 2)
-            return None, 2 
-        
-        
-        else:  # minimizing player
-            for move in moves:
-                self.quick_play(move)  
-                opponent_move, opponent_winner = self.minimax(alpha, beta)  
-                self.undo(move)  
 
-                if opponent_winner == self.player:
-                    # win for the minimizing player
-                    self.add_to_tt(hash, move, self.player)
-                    return move, self.player
-
-                if opponent_winner != self.player:
-                    # opponent wins
-                    score = 1
-                else:
-                    # current player wins
-                    score = 0
-                
-                beta = min(beta, score)
-
-                if beta <= alpha: # prune
+                if beta <= alpha:  # Prune
                     break
 
-            # no winning move is found
-            self.add_to_tt(hash, None, 1)
-            return None, 1
+            # No winning move found
+            self.add_to_tt(hash, best_move, 2 if best_score == -1 else self.player)
+            return best_move, 2 if best_score == -1 else self.player
+        
+        else:  # Minimizing player
+            best_score = float('inf')
+            ordered_moves = self.get_ordered_moves(moves)  # Order moves using heuristic
 
-            
-    
+            for move in ordered_moves:  # Evaluate moves in heuristic order
+                self.quick_play(move)
+                opponent_move, opponent_winner = self.minimax(alpha, beta)
+                self.undo(move)
+
+                if opponent_winner == self.player:
+                    # Win for the minimizing player
+                    self.add_to_tt(hash, move, self.player)
+                    return move, self.player
+
+                elif opponent_winner != self.player:
+                    # Opponent wins
+                    score = 1
+                else:
+                    # Current player wins
+                    score = 0
+
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+
+                beta = min(beta, score)
+
+                if beta <= alpha:  # Prune
+                    break
+
+            # No winning move found
+            self.add_to_tt(hash, best_move, 1 if best_score == 1 else self.player)
+            return best_move, 1 if best_score == 1 else self.player
+
+ 
     def genmove(self, args):
         
         moves = self.get_legal_moves()  # all legal moves
