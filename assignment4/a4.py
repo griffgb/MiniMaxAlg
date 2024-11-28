@@ -11,95 +11,138 @@ import time
 import numpy as np
 
 
+# # Custom time out exception
+# class TimeoutException(Exception):
+#     pass
+
 # Function that is called when we reach the time limit
 def handle_alarm(signum, frame):
     raise TimeoutError
 
-
-# def uct(child_wins: int, child_visits: int, parent_visits: int, exploration: float) -> float:
-#     return child_wins / child_visits + exploration * np.sqrt(np.log(parent_visits) / child_visits)
-
-
-
-# class BinaryTreeNode:
+# class MCTSNode:
 #     def __init__(self, board, player, parent=None, move=None):
-#         self.board = [row[:] for row in board]  # Deep copy of the board
-#         self.player = player  # Current player
+#         self.board = board
+#         self.player = player
 #         self.parent = parent
-#         self.move = move  # Move that led to this node
+#         self.move = move  # The move that led to this node
+#         self.n_visits = 0
+#         self.reward = 0
 #         self.children = []
-#         self.visits = 0
-#         self.wins = 0
-#         self.untried_moves = self.get_legal_moves()
-
+#         self.untried_moves = self.get_legal_moves()  # List of moves that can be tried at this node
+    
 #     def get_legal_moves(self):
-#         # Use CommandInterface's legal move generator
-#         legal_moves = []
-#         print(legal_moves)
+#         moves = []
 #         for y in range(len(self.board)):
 #             for x in range(len(self.board[0])):
-#                 for num in (0, 1):
-#                     if self.valid_move(x, y, num):  # Use starter code's valid_move method
-#                         legal_moves.append((x, y, num))
-#         return legal_moves
+#                 for num in range(2):
+#                     legal, _ = self.is_legal(x, y, num)
+#                     if legal:
+#                         moves.append((x, y, num))
+#         return moves
 
-#     def valid_move(self, x, y, num):
-#         # Use the starter code's valid_move method for consistency
-#         legal, _ = CommandInterface.is_legal(self, x, y, num)
-#         return legal
+#     def is_legal(self, x, y, num):
+#         # Check if a move is legal (same as in CommandInterface)
+#         if self.board[y][x] is not None:
+#             return False, "occupied"
+        
+#         consecutive = 0
+#         count = 0
+#         self.board[y][x] = num
+#         for row in range(len(self.board)):
+#             if self.board[row][x] == num:
+#                 count += 1
+#                 consecutive += 1
+#                 if consecutive >= 3:
+#                     self.board[y][x] = None
+#                     return False, "three in a row"
+#             else:
+#                 consecutive = 0
+#         too_many = count > len(self.board) // 2 + len(self.board) % 2
+        
+#         consecutive = 0
+#         count = 0
+#         for col in range(len(self.board[0])):
+#             if self.board[y][col] == num:
+#                 count += 1
+#                 consecutive += 1
+#                 if consecutive >= 3:
+#                     self.board[y][x] = None
+#                     return False, "three in a row"
+#             else:
+#                 consecutive = 0
+#         if too_many or count > len(self.board[0]) // 2 + len(self.board[0]) % 2:
+#             self.board[y][x] = None
+#             return False, "too many " + str(num)
 
-# class MCTSBinaryGame:
-#     def __init__(self, root_board, root_player):
-#         self.root = BinaryTreeNode(root_board, root_player)
+#         self.board[y][x] = None
+#         return True, ""
+    
+#     def expand(self):
+#         if not self.untried_moves:
+#             return
+#         move = self.untried_moves.pop()
+#         new_board = [row[:] for row in self.board]
+#         new_board[move[1]][move[0]] = move[2]
+#         next_player = 2 if self.player == 1 else 1
+#         child_node = MCTSNode(new_board, next_player, parent=self, move=move)
+#         self.children.append(child_node)
+#         return child_node
 
-#     def select(self, node):
-#         while node.untried_moves == [] and node.children != []:
-#             node = max(
-#                 node.children,
-#                 key=lambda child: uct(child.wins, child.visits, node.visits, 1.0)
-#             )
-#         return node
-
-#     def expand(self, node):
-#         if node.untried_moves:
-#             move = node.untried_moves.pop()
-#             new_board = [row[:] for row in node.board]  # Copy board
-#             x, y, num = move
-#             new_board[y][x] = num
-#             new_node = BinaryTreeNode(new_board, 3 - node.player, node, move)
-#             node.children.append(new_node)
-#             return new_node
-#         return node
-
-#     def simulate(self, node):
-#         board = [row[:] for row in node.board]
-#         player = node.player
+#     def is_terminal(self):
+#         return len(self.get_legal_moves()) == 0
+    
+#     def simulate(self):
+#         # Simulate a random game from this node
+#         current_board = [row[:] for row in self.board]
+#         current_player = self.player
 #         while True:
-#             legal_moves = node.get_legal_moves()
+#             legal_moves = self.get_legal_moves()
 #             if not legal_moves:
-#                 return 1 if player == 2 else 0  # Opponent loses
+#                 break
 #             move = random.choice(legal_moves)
-#             x, y, num = move
-#             board[y][x] = num
-#             player = 3 - player  # Switch player
+#             current_board[move[1]][move[0]] = move[2]
+#             current_player = 2 if current_player == 1 else 1
+#         return self.evaluate(current_board)
+    
+#     def evaluate(self, board):
+#         # Simple evaluation function, -1 for loss, 0 for draw, 1 for win
+#         # This is a placeholder, you'll want to improve this
+#         if self.is_terminal():
+#             return 1 if self.player == 2 else -1
+#         return 0
+    
+# class MCTS:
+#     def __init__(self, root):
+#         self.root = root
 
+#     def ucb1(self, node):
+#         if node.n_visits == 0:
+#             return float('inf')
+#         return node.reward / node.n_visits + math.sqrt(2 * math.log(node.parent.n_visits) / node.n_visits)
+    
+#     def select(self):
+#         node = self.root
+#         while node.children:
+#             node = max(node.children, key=self.ucb1)
+#         return node
+    
 #     def backpropagate(self, node, result):
 #         while node:
-#             node.visits += 1
-#             node.wins += result
+#             node.n_visits += 1
+#             node.reward += result
 #             node = node.parent
-
-#     def best_move(self, time_limit):
-#         import time
+    
+#     def run(self, time_limit=30):
 #         start_time = time.time()
 #         while time.time() - start_time < time_limit:
-#             leaf = self.select(self.root)
-#             expanded = self.expand(leaf)
-#             result = self.simulate(expanded)
-#             self.backpropagate(expanded, result)
-#         return max(self.root.children, key=lambda c: c.visits).move
-
-
+#             node = self.select()
+#             if node.is_terminal():
+#                 result = node.simulate()
+#             else:
+#                 child = node.expand()
+#                 result = child.simulate()
+#             self.backpropagate(node, result)
+#         return self.select().move
 
 
 class CommandInterface:
@@ -366,7 +409,7 @@ class CommandInterface:
             return "late"
 
     def heuristic_value(self, move):
-        x, y, value = int(move[0]), int(move[1]), int(move[2])  
+        x, y, value = int(move[0]), int(move[1 ]), int(move[2])  
         center_x, center_y = self.n // 2, self.m // 2
 
         # Heuristic components
@@ -516,13 +559,13 @@ class CommandInterface:
             # if the program cant find a winning move just pick a random spot
             if move is None:
                 move = moves[random.randint(0, len(moves) - 1)]
-
+                print("Failsafe")
             # Disable the time limit alarm
             signal.alarm(0)
 
         except TimeoutError:
             move = moves[random.randint(0, len(moves) - 1)]
-
+            print("Failsafe")
         # restore the board and player state
         self.board = board_copy
         self.player = player_copy
@@ -532,7 +575,7 @@ class CommandInterface:
         print(" ".join(move))
 
         return True
-    
+
     #===============================================================================================
     # ɅɅɅɅɅɅɅɅɅɅ End of Assignment 4 functions. ɅɅɅɅɅɅɅɅɅɅ
     #===============================================================================================
