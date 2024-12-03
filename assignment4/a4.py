@@ -10,140 +10,9 @@ import math
 import time 
 import numpy as np
 
-
-# # Custom time out exception
-# class TimeoutException(Exception):
-#     pass
-
 # Function that is called when we reach the time limit
 def handle_alarm(signum, frame):
     raise TimeoutError
-
-# class MCTSNode:
-#     def __init__(self, board, player, parent=None, move=None):
-#         self.board = board
-#         self.player = player
-#         self.parent = parent
-#         self.move = move  # The move that led to this node
-#         self.n_visits = 0
-#         self.reward = 0
-#         self.children = []
-#         self.untried_moves = self.get_legal_moves()  # List of moves that can be tried at this node
-    
-#     def get_legal_moves(self):
-#         moves = []
-#         for y in range(len(self.board)):
-#             for x in range(len(self.board[0])):
-#                 for num in range(2):
-#                     legal, _ = self.is_legal(x, y, num)
-#                     if legal:
-#                         moves.append((x, y, num))
-#         return moves
-
-#     def is_legal(self, x, y, num):
-#         # Check if a move is legal (same as in CommandInterface)
-#         if self.board[y][x] is not None:
-#             return False, "occupied"
-        
-#         consecutive = 0
-#         count = 0
-#         self.board[y][x] = num
-#         for row in range(len(self.board)):
-#             if self.board[row][x] == num:
-#                 count += 1
-#                 consecutive += 1
-#                 if consecutive >= 3:
-#                     self.board[y][x] = None
-#                     return False, "three in a row"
-#             else:
-#                 consecutive = 0
-#         too_many = count > len(self.board) // 2 + len(self.board) % 2
-        
-#         consecutive = 0
-#         count = 0
-#         for col in range(len(self.board[0])):
-#             if self.board[y][col] == num:
-#                 count += 1
-#                 consecutive += 1
-#                 if consecutive >= 3:
-#                     self.board[y][x] = None
-#                     return False, "three in a row"
-#             else:
-#                 consecutive = 0
-#         if too_many or count > len(self.board[0]) // 2 + len(self.board[0]) % 2:
-#             self.board[y][x] = None
-#             return False, "too many " + str(num)
-
-#         self.board[y][x] = None
-#         return True, ""
-    
-#     def expand(self):
-#         if not self.untried_moves:
-#             return
-#         move = self.untried_moves.pop()
-#         new_board = [row[:] for row in self.board]
-#         new_board[move[1]][move[0]] = move[2]
-#         next_player = 2 if self.player == 1 else 1
-#         child_node = MCTSNode(new_board, next_player, parent=self, move=move)
-#         self.children.append(child_node)
-#         return child_node
-
-#     def is_terminal(self):
-#         return len(self.get_legal_moves()) == 0
-    
-#     def simulate(self):
-#         # Simulate a random game from this node
-#         current_board = [row[:] for row in self.board]
-#         current_player = self.player
-#         while True:
-#             legal_moves = self.get_legal_moves()
-#             if not legal_moves:
-#                 break
-#             move = random.choice(legal_moves)
-#             current_board[move[1]][move[0]] = move[2]
-#             current_player = 2 if current_player == 1 else 1
-#         return self.evaluate(current_board)
-    
-#     def evaluate(self, board):
-#         # Simple evaluation function, -1 for loss, 0 for draw, 1 for win
-#         # This is a placeholder, you'll want to improve this
-#         if self.is_terminal():
-#             return 1 if self.player == 2 else -1
-#         return 0
-    
-# class MCTS:
-#     def __init__(self, root):
-#         self.root = root
-
-#     def ucb1(self, node):
-#         if node.n_visits == 0:
-#             return float('inf')
-#         return node.reward / node.n_visits + math.sqrt(2 * math.log(node.parent.n_visits) / node.n_visits)
-    
-#     def select(self):
-#         node = self.root
-#         while node.children:
-#             node = max(node.children, key=self.ucb1)
-#         return node
-    
-#     def backpropagate(self, node, result):
-#         while node:
-#             node.n_visits += 1
-#             node.reward += result
-#             node = node.parent
-    
-#     def run(self, time_limit=30):
-#         start_time = time.time()
-#         while time.time() - start_time < time_limit:
-#             node = self.select()
-#             if node.is_terminal():
-#                 result = node.simulate()
-#             else:
-#                 child = node.expand()
-#                 result = child.simulate()
-#             self.backpropagate(node, result)
-#         return self.select().move
-
 
 class CommandInterface:
 
@@ -448,7 +317,7 @@ class CommandInterface:
         return score
 
     def get_ordered_moves(self, moves):
-        # Sort moves by heuristic value in descending order (higher score = higher priority)
+        # sort moves by heuristic value in descending order (higher score = higher priority)
         return sorted(moves, key=self.heuristic_value, reverse=True)    
 
     def minimax(self, alpha = ('-inf'), beta = ('inf')):
@@ -470,23 +339,23 @@ class CommandInterface:
 
         if self.player == 1:  # Maximizing player
             best_score = float('-inf')
-            ordered_moves = self.get_ordered_moves(moves)  # Order moves using heuristic
+            ordered_moves = self.get_ordered_moves(moves)  # order moves using heuristic
 
-            for move in ordered_moves:  # Evaluate moves in heuristic order
+            for move in ordered_moves:  # evaluate moves in heuristic order
                 self.quick_play(move)
                 opponent_move, opponent_winner = self.minimax(alpha, beta)
                 self.undo(move)
 
                 if opponent_winner == self.player:
-                    # Win for the maximizing player
+                    # win for the maximizing player
                     self.add_to_tt(hash, move, self.player)
                     return move, self.player
 
                 elif opponent_winner != self.player:
-                    # Opponent wins
+                    # opponent wins
                     score = -1
                 else:
-                    # Current player wins
+                    # current player wins
                     score = 0
 
                 if score > best_score:
@@ -498,29 +367,29 @@ class CommandInterface:
                 if beta <= alpha:  # Prune
                     break
 
-            # No winning move found
+            # no winning move found
             self.add_to_tt(hash, best_move, 2 if best_score == -1 else self.player)
             return best_move, 2 if best_score == -1 else self.player
         
         else:  # Minimizing player
             best_score = float('inf')
-            ordered_moves = self.get_ordered_moves(moves)  # Order moves using heuristic
+            ordered_moves = self.get_ordered_moves(moves)  # order moves using heuristic
 
-            for move in ordered_moves:  # Evaluate moves in heuristic order
+            for move in ordered_moves:  # evaluate moves in heuristic order
                 self.quick_play(move)
                 opponent_move, opponent_winner = self.minimax(alpha, beta)
                 self.undo(move)
 
                 if opponent_winner == self.player:
-                    # Win for the minimizing player
+                    #win for the minimizing player
                     self.add_to_tt(hash, move, self.player)
                     return move, self.player
 
                 elif opponent_winner != self.player:
-                    # Opponent wins
+                    # opponent wins
                     score = 1
                 else:
-                    # Current player wins
+                    # current player wins
                     score = 0
 
                 if score < best_score:
@@ -529,16 +398,15 @@ class CommandInterface:
 
                 beta = min(beta, score)
 
-                if beta <= alpha:  # Prune
+                if beta <= alpha:  # prune
                     break
 
-            # No winning move found
+            # no winning move found
             self.add_to_tt(hash, best_move, 1 if best_score == 1 else self.player)
             return best_move, 1 if best_score == 1 else self.player
 
  
     def genmove(self, args):
-        
         moves = self.get_legal_moves()  # all legal moves
         if len(moves) == 0:
             print("resign")  # resign if no moves are available
@@ -559,18 +427,16 @@ class CommandInterface:
             # if the program cant find a winning move just pick a random spot
             if move is None:
                 move = moves[random.randint(0, len(moves) - 1)]
-                print("Failsafe")
+               
             # Disable the time limit alarm
             signal.alarm(0)
 
         except TimeoutError:
             move = moves[random.randint(0, len(moves) - 1)]
-            print("Failsafe")
+           
         # restore the board and player state
         self.board = board_copy
         self.player = player_copy
-
-        # apply move
         self.play(move)
         print(" ".join(move))
 
