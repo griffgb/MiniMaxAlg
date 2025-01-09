@@ -1,1 +1,1 @@
-# CMPUT455-A4
+# A minimax algorithm with a creative heuristic was developed to compete against two types of opponents: a random player (CPU) and another minimax player (CPU). This program was created for CMPUT 455 to participate in a tournament where it faced other students' algorithms and the professor's MCTS algorithm. The competition was based on a custom game called the 'Binary Game'. 
