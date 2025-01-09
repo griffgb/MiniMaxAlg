@@ -13,4 +13,4 @@ Binary Game rules can be found here [BinaryRules](https://webdocs.cs.ualberta.ca
  
 ## License
 
-Assignent description can be found here [CMPUT455](https://webdocs.cs.ualberta.ca/~mmueller/courses/cmput455/assignments/a4.html)
+Assignment description can be found here [CMPUT455](https://webdocs.cs.ualberta.ca/~mmueller/courses/cmput455/assignments/a4.html)
